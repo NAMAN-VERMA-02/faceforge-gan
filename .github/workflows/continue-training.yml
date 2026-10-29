@@ -1,0 +1,116 @@
+name: Continue training (cloud CPU)
+
+# Resumes FaceForge training from the previous run's checkpoint, trains for another
+# ~5 hours, measures FID, commits the improved generator to model/, and then starts
+# the next round on its own until `rounds_left` reaches 0.
+#
+# Starts automatically when "Train model (cloud CPU)" finishes successfully,
+# or by hand from the Actions tab (give it the run id to resume from).
+on:
+  workflow_run:
+    workflows: ["Train model (cloud CPU)"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      from_run:
+        description: "Run id whose 'faceforge-run' artifact to resume from"
+        required: true
+      rounds_left:
+        description: "Rounds to run after this one"
+        default: "1"
+      minutes:
+        description: "Training minutes this round"
+        default: "300"
+      shards:
+        description: "CelebA shards (~8.5k faces each)"
+        default: "4"
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: faceforge-training
+  cancel-in-progress: false
+
+jobs:
+  train:
+    # Only chain off a *successful* long run (the 25-minute demo run is skipped:
+    # it trained 1 shard and is superseded by the long run's checkpoint).
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_sha != '3065eb3e1c5d16b1d13dbb0ea8ad3c7fea3c09f1')
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    env:
+      FROM_RUN: ${{ github.event.inputs.from_run || github.event.workflow_run.id }}
+      ROUNDS_LEFT: ${{ github.event.inputs.rounds_left || '1' }}
+      MINUTES: ${{ github.event.inputs.minutes || '300' }}
+      SHARDS: ${{ github.event.inputs.shards || '4' }}
+      HF_HUB_DISABLE_PROGRESS_BARS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install (CPU-only PyTorch)
+        run: |
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install numpy pillow pyarrow huggingface_hub tqdm "torchmetrics[image]"
+      - name: Download previous checkpoint
+        uses: actions/download-artifact@v4
+        with:
+          name: faceforge-run
+          path: runs/faceforge
+          run-id: ${{ env.FROM_RUN }}
+          github-token: ${{ github.token }}
+      - name: Show checkpoint
+        run: |
+          ls -la runs/faceforge
+          python -c "import json;h=json.load(open('runs/faceforge/history.json'));print('resuming after epoch',h[-1]['epoch'])"
+      - name: Train
+        run: |
+          python -m faceforge.train \
+            --resume runs/faceforge/last.pt \
+            --num-shards $SHARDS \
+            --epochs 100000 \
+            --batch-size 64 \
+            --fid-every 0 \
+            --num-workers 2 \
+            --time-budget-min $MINUTES \
+            --out-dir runs/faceforge
+      - name: Measure FID
+        run: python -m faceforge.evaluate --checkpoint runs/faceforge/generator.pt --samples 3000 --out runs/faceforge/fid.json
+      - name: Collect outputs
+        if: always()
+        run: |
+          mkdir -p model assets
+          cp runs/faceforge/generator.pt runs/faceforge/config.json runs/faceforge/history.json model/ || true
+          cp runs/faceforge/fid.json model/ || true
+          ls runs/faceforge/samples | tail -1 | xargs -I{} cp runs/faceforge/samples/{} assets/samples_latest.png || true
+          cat model/fid.json || true
+      - name: Upload run as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: faceforge-run
+          path: runs/faceforge
+      - name: Commit improved model
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f model/ assets/samples_latest.png
+          git commit -m "Improved generator after continued training (FID: $(python -c "import json;print(json.load(open('model/fid.json'))['fid'])" 2>/dev/null || echo n/a))" || echo "nothing to commit"
+          git pull --rebase -X theirs origin main
+          git push origin HEAD:main
+      - name: Start next round
+        if: success() && env.ROUNDS_LEFT != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run continue-training.yml --ref main \
+            -f from_run=${{ github.run_id }} \
+            -f rounds_left=$((ROUNDS_LEFT - 1)) \
+            -f minutes=$MINUTES -f shards=$SHARDS

@@ -59,12 +59,18 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--checkpoint", default="runs/faceforge/generator.pt")
     p.add_argument("--samples", type=int, default=10000)
+    p.add_argument("--out", default=None, help="optional JSON file to write the score to")
     args = p.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     G, cfg = load_generator(args.checkpoint, device)
     ds = CelebAFaces(build_cache(cfg.data_dir, cfg.attributes, cfg.num_shards, cfg.image_size), hflip=False)
-    compute_fid(G, ds, cfg, device, n=args.samples)
+    score = compute_fid(G, ds, cfg, device, n=args.samples)
+    if args.out:
+        import json
+
+        with open(args.out, "w") as f:
+            json.dump({"fid": round(score, 2), "samples": min(args.samples, len(ds))}, f, indent=2)
 
 
 if __name__ == "__main__":
