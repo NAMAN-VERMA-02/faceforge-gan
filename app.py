@@ -100,7 +100,7 @@ with gr.Blocks(title="FaceForge: Conditional GAN") as demo:
         m_out = gr.Image(type="numpy")
         m_btn.click(morph, [a_attrs, b_attrs, a_seed, b_seed, steps], m_out)
 
-    gr.Markdown("Code: [github.com/Naman-verma-02/faceforge-gan](https://github.com/Naman-verma-02/faceforge-gan)")
+    gr.Markdown("Code: [github.com/Naman-verma-02/faceforge-gan](https://github.com/NAMAN-VERMA-02/faceforge-gan)")
 
 if __name__ == "__main__":
     demo.launch(server_name="0.0.0.0", server_port=int(os.environ.get("PORT", 7860)))
