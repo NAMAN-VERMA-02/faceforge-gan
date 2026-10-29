@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ["app.py", "faceforge/**", "space/**", "model/**"]
+    paths: ["app.py", "faceforge/**", "space/**", "model/**", "model_quick/**"]
 
 jobs:
   deploy:
@@ -24,7 +24,7 @@ jobs:
           mkdir -p build
           cp app.py build/
           cp -r faceforge build/
-          if [ -d model ]; then cp -r model build/; fi
+          for d in model model_quick; do if [ -d $d ]; then cp -r $d build/; fi; done
           cp space/README.md space/requirements.txt build/
       - name: Upload to Space
         env:

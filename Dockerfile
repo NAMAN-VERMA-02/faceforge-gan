@@ -7,9 +7,9 @@ WORKDIR /app
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
  && pip install --no-cache-dir numpy huggingface_hub "gradio>=4.44"
 
-COPY faceforge ./faceforge
-COPY model ./model
-COPY app.py .
+# Copies the code plus whichever trained model folders exist (model/, model_quick/).
+# Everything else is excluded by .dockerignore.
+COPY . .
 
 ENV PORT=7860
 EXPOSE 7860

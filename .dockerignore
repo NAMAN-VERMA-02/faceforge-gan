@@ -1,0 +1,6 @@
+*
+!faceforge/
+!model/
+!model_quick/
+!app.py
+**/__pycache__

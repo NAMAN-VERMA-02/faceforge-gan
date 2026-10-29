@@ -16,8 +16,11 @@ import torch
 from faceforge.config import ATTRIBUTES
 from faceforge.inference import DEFAULT_HUB_REPO, generate, interpolate, load_generator
 
-_BUNDLED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "model", "generator.pt")
-MODEL = os.environ.get("FACEFORGE_MODEL") or (_BUNDLED if os.path.exists(_BUNDLED) else DEFAULT_HUB_REPO)
+_HERE = os.path.dirname(os.path.abspath(__file__))
+# Prefer the full training run (model/), then the quick demo run (model_quick/), then the Hub.
+_CANDIDATES = [os.path.join(_HERE, d, "generator.pt") for d in ("model", "model_quick")]
+_BUNDLED = next((p for p in _CANDIDATES if os.path.exists(p)), None)
+MODEL = os.environ.get("FACEFORGE_MODEL") or _BUNDLED or DEFAULT_HUB_REPO
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 G, CFG = load_generator(MODEL, DEVICE)
 LABELS = [a.replace("_", " ") for a in CFG.attributes]
