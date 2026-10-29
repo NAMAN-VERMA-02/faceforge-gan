@@ -1,6 +1,6 @@
 {
   "image_size": 64,
-  "num_shards": 3,
+  "num_shards": 4,
   "data_dir": "data",
   "attributes": [
     "Male",
@@ -13,7 +13,7 @@
   "z_dim": 128,
   "g_channels": 64,
   "d_channels": 64,
-  "epochs": 500,
+  "epochs": 100000,
   "batch_size": 64,
   "lr_g": 0.0001,
   "lr_d": 0.0004,
@@ -30,7 +30,7 @@
   "sample_every": 1,
   "fid_every": 0,
   "fid_samples": 5000,
-  "time_budget_min": 320.0,
+  "time_budget_min": 300.0,
   "seed": 42,
   "num_workers": 2
 }
