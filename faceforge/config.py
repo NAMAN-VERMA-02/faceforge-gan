@@ -32,11 +32,13 @@ class Config:
     # Optimisation (DCGAN paper settings, plus TTUR: a faster D learning rate)
     epochs: int = 25
     batch_size: int = 128
-    lr_g: float = 2e-4
-    lr_d: float = 2e-4
-    betas: tuple[float, float] = (0.5, 0.999)
+    lr_g: float = 1e-4             # TTUR (Heusel et al. 2017): D learns faster than G
+    lr_d: float = 4e-4
+    betas: tuple[float, float] = (0.0, 0.999)  # beta1=0 is standard with hinge loss + TTUR
     label_smoothing: float = 0.9   # one-sided: real targets become 0.9 instead of 1.0
     ema_decay: float = 0.999       # exponential moving average of generator weights
+    ema_warmup: bool = True        # ramp EMA decay up from 0 so early weights don't linger
+    diffaug: str = "color,translation,cutout"  # DiffAugment policy ("" disables)
     amp: bool = True               # mixed precision on GPU
 
     # Logging / checkpoints

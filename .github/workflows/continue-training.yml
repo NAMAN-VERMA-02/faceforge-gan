@@ -35,12 +35,13 @@ concurrency:
 
 jobs:
   train:
-    # Only chain off a *successful* long run (the 25-minute demo run is skipped:
-    # it trained 1 shard and is superseded by the long run's checkpoint).
+    # Only chain off a *successful* improved run. The 25-minute demo run and the first
+    # long run (older code, no DiffAugment) are skipped: the improved run supersedes them.
     if: >
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.head_sha != '3065eb3e1c5d16b1d13dbb0ea8ad3c7fea3c09f1')
+       github.event.workflow_run.head_sha != '3065eb3e1c5d16b1d13dbb0ea8ad3c7fea3c09f1' &&
+       github.event.workflow_run.head_sha != '06b9f1353a9dc5976cb097bafa9d3b67a3fd8dd0')
     runs-on: ubuntu-latest
     timeout-minutes: 355
     env:

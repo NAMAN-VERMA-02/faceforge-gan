@@ -18,6 +18,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torchvision.utils import save_image
 
+from faceforge.augment import diff_augment
 from faceforge.config import Config
 from faceforge.models import Discriminator, Generator, count_params, update_ema
 
@@ -54,7 +55,8 @@ def fixed_sample_inputs(cfg: Config, device: torch.device, n_z: int = 8):
     return zs.to(device), ys.to(device), n_z
 
 
-def save_checkpoint(path: Path, G, D, G_ema, opt_g, opt_d, epoch: int, cfg: Config, history: list) -> None:
+def save_checkpoint(path: Path, G, D, G_ema, opt_g, opt_d, epoch: int, cfg: Config, history: list,
+                    global_step: int = 0) -> None:
     torch.save(
         {
             "G": G.state_dict(),
@@ -65,6 +67,7 @@ def save_checkpoint(path: Path, G, D, G_ema, opt_g, opt_d, epoch: int, cfg: Conf
             "epoch": epoch,
             "config": cfg.to_dict(),
             "history": history,
+            "global_step": global_step,
         },
         path,
     )
@@ -114,9 +117,13 @@ def train(cfg: Config, loss_kind: str = "hinge", fake_data: bool = False, resume
         G.load_state_dict(ck["G"]); D.load_state_dict(ck["D"]); G_ema.load_state_dict(ck["G_ema"])
         opt_g.load_state_dict(ck["opt_g"]); opt_d.load_state_dict(ck["opt_d"])
         start_epoch, history = ck["epoch"] + 1, ck.get("history", [])
+        global_step = ck.get("global_step", 10_000)  # old checkpoints: treat EMA as warmed up
         print(f"resumed from epoch {ck['epoch']}")
+    else:
+        global_step = 0
 
     z_fix, y_fix, ncol = fixed_sample_inputs(cfg, device)
+    aug = (lambda x: diff_augment(x, cfg.diffaug)) if cfg.diffaug else (lambda x: x)
     step = 0
     t_start = time.time()
     deadline = t_start + cfg.time_budget_min * 60 if cfg.time_budget_min > 0 else None
@@ -136,21 +143,24 @@ def train(cfg: Config, loss_kind: str = "hinge", fake_data: bool = False, resume
             z = torch.randn(b, cfg.z_dim, device=device)
             with torch.autocast(device.type, enabled=use_amp):
                 fake = G(z, y_fake)
-                d_loss = d_loss_fn(D(real, y), D(fake.detach(), y_fake), loss_kind, cfg.label_smoothing)
+                # DiffAugment: identical random augmentation pipeline for real and fake
+                d_loss = d_loss_fn(D(aug(real), y), D(aug(fake.detach()), y_fake), loss_kind, cfg.label_smoothing)
             opt_d.zero_grad(set_to_none=True)
             scaler.scale(d_loss).backward()
             scaler.step(opt_d)
 
             # ---- generator step
             with torch.autocast(device.type, enabled=use_amp):
-                g_loss = g_loss_fn(D(fake, y_fake), loss_kind)
+                g_loss = g_loss_fn(D(aug(fake), y_fake), loss_kind)
             opt_g.zero_grad(set_to_none=True)
             scaler.scale(g_loss).backward()
             scaler.step(opt_g)
             scaler.update()
-            update_ema(G_ema, G, cfg.ema_decay)
+            # EMA warm-up: early on, follow G closely; approach ema_decay as training goes on
+            decay = min(cfg.ema_decay, (1 + global_step) / (10 + global_step)) if cfg.ema_warmup else cfg.ema_decay
+            update_ema(G_ema, G, decay)
 
-            d_sum += d_loss.item(); g_sum += g_loss.item(); n += 1; step += 1
+            d_sum += d_loss.item(); g_sum += g_loss.item(); n += 1; step += 1; global_step += 1
             if step % 200 == 0:
                 print(f"  step {step:6d} | D {d_loss.item():.3f} | G {g_loss.item():.3f}")
             if max_steps and step >= max_steps:
@@ -180,7 +190,7 @@ def train(cfg: Config, loss_kind: str = "hinge", fake_data: bool = False, resume
         history.append(rec)
         print(json.dumps(rec))
         (out / "history.json").write_text(json.dumps(history, indent=2))
-        save_checkpoint(out / "last.pt", G, D, G_ema, opt_g, opt_d, epoch, cfg, history)
+        save_checkpoint(out / "last.pt", G, D, G_ema, opt_g, opt_d, epoch, cfg, history, global_step)
         export_generator(out / "generator.pt", G_ema, cfg)
         if (max_steps and step >= max_steps) or out_of_time:
             break

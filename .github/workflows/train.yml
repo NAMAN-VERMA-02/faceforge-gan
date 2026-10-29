@@ -11,10 +11,10 @@ on:
     inputs:
       minutes:
         description: "Training time budget in minutes (max ~330)"
-        default: "25"
+        default: "320"
       shards:
         description: "CelebA shards to use (~8.5k faces each)"
-        default: "1"
+        default: "3"
 
 permissions:
   contents: write
@@ -40,12 +40,12 @@ jobs:
           HF_HUB_DISABLE_PROGRESS_BARS: "1"
         run: |
           python -m faceforge.train \
-            --num-shards ${{ github.event.inputs.shards || '1' }} \
+            --num-shards ${{ github.event.inputs.shards || '3' }} \
             --epochs 500 \
             --batch-size 64 \
             --fid-every 0 \
             --num-workers 2 \
-            --time-budget-min ${{ github.event.inputs.minutes || '25' }} \
+            --time-budget-min ${{ github.event.inputs.minutes || '320' }} \
             --out-dir runs/faceforge
       - name: Collect outputs
         if: always()
@@ -67,5 +67,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -f model/generator.pt model/config.json model/history.json assets/*.png
           git commit -m "Add trained generator from cloud CPU run" || echo "nothing to commit"
-          git pull --rebase origin main
+          git pull --rebase -X theirs origin main
           git push origin HEAD:main
