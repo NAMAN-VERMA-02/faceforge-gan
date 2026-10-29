@@ -1,0 +1,47 @@
+name: Deploy to Hugging Face Space
+
+# Pushes the demo (app.py + faceforge package) to a Hugging Face Space.
+# Setup once: repo Settings -> Secrets and variables -> Actions
+#   secret   HF_TOKEN  = a Hugging Face *write* token
+#   variable HF_SPACE  = <hf-username>/faceforge-gan   (the Space id)
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["app.py", "faceforge/**", "space/**"]
+
+jobs:
+  deploy:
+    if: ${{ vars.HF_SPACE != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Assemble Space folder
+        run: |
+          mkdir -p build
+          cp app.py build/
+          cp -r faceforge build/
+          cp space/README.md space/requirements.txt build/
+      - name: Upload to Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          pip install -q huggingface_hub
+          python - <<'EOF'
+          import os
+          from huggingface_hub import HfApi
+          api = HfApi(token=os.environ["HF_TOKEN"])
+          space = os.environ["HF_SPACE"]
+          api.create_repo(space, repo_type="space", space_sdk="gradio", exist_ok=True)
+          api.upload_folder(folder_path="build", repo_id=space, repo_type="space",
+                            commit_message="Deploy from GitHub Actions")
+          print(f"https://huggingface.co/spaces/{space}")
+          EOF
+        shell: bash
+      - name: Note
+        run: echo "Space deployed. Set FACEFORGE_MODEL in Space settings if your model repo id differs from the default."
+    env:
+      HF_SPACE: ${{ vars.HF_SPACE }}

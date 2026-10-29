@@ -1,0 +1,22 @@
+[project]
+name = "faceforge"
+version = "1.0.0"
+description = "Conditional DCGAN that generates faces with controllable attributes"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Naman Verma" }]
+
+[tool.setuptools]
+packages = ["faceforge"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E702"]

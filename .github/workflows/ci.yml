@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install (CPU-only PyTorch)
+        run: |
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install numpy pillow pyarrow huggingface_hub tqdm pytest ruff
+      - name: Lint
+        run: ruff check faceforge tests
+      - name: Unit + smoke tests
+        run: pytest -q
+      - name: CLI smoke run
+        run: python -m faceforge.train --fake-data --epochs 1 --batch-size 8 --max-steps 3 --fid-every 0 --out-dir /tmp/run
