@@ -8,6 +8,7 @@ RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/wh
  && pip install --no-cache-dir numpy huggingface_hub "gradio>=4.44"
 
 COPY faceforge ./faceforge
+COPY model ./model
 COPY app.py .
 
 ENV PORT=7860

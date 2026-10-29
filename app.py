@@ -16,7 +16,8 @@ import torch
 from faceforge.config import ATTRIBUTES
 from faceforge.inference import DEFAULT_HUB_REPO, generate, interpolate, load_generator
 
-MODEL = os.environ.get("FACEFORGE_MODEL", DEFAULT_HUB_REPO)
+_BUNDLED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "model", "generator.pt")
+MODEL = os.environ.get("FACEFORGE_MODEL") or (_BUNDLED if os.path.exists(_BUNDLED) else DEFAULT_HUB_REPO)
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 G, CFG = load_generator(MODEL, DEVICE)
 LABELS = [a.replace("_", " ") for a in CFG.attributes]

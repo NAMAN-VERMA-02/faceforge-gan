@@ -1,0 +1,71 @@
+name: Train model (cloud CPU)
+
+# Trains FaceForge on a GitHub-hosted runner and commits the trained generator to
+# model/generator.pt, so the demo works without any GPU or Hugging Face setup.
+# A GPU run in Colab (notebooks/train_colab.ipynb) gives sharper results.
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/train.yml"]
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: "Training time budget in minutes (max ~330)"
+        default: "320"
+      shards:
+        description: "CelebA shards to use (~8.5k faces each)"
+        default: "2"
+
+permissions:
+  contents: write
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install (CPU-only PyTorch)
+        run: |
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install numpy pillow pyarrow huggingface_hub tqdm
+      - name: Show hardware
+        run: nproc && free -h
+      - name: Train
+        env:
+          HF_HUB_DISABLE_PROGRESS_BARS: "1"
+        run: |
+          python -m faceforge.train \
+            --num-shards ${{ github.event.inputs.shards || '2' }} \
+            --epochs 500 \
+            --batch-size 64 \
+            --fid-every 0 \
+            --num-workers 2 \
+            --time-budget-min ${{ github.event.inputs.minutes || '320' }} \
+            --out-dir runs/faceforge
+      - name: Collect outputs
+        if: always()
+        run: |
+          mkdir -p model assets
+          cp runs/faceforge/generator.pt runs/faceforge/config.json runs/faceforge/history.json model/ || true
+          ls runs/faceforge/samples | tail -1 | xargs -I{} cp runs/faceforge/samples/{} assets/samples_latest.png || true
+          ls runs/faceforge/samples | head -1 | xargs -I{} cp runs/faceforge/samples/{} assets/samples_first.png || true
+          ls -la model assets
+      - name: Upload run as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: faceforge-run
+          path: runs/faceforge
+      - name: Commit trained model
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f model/generator.pt model/config.json model/history.json assets/*.png
+          git commit -m "Add trained generator from cloud CPU run" || echo "nothing to commit"
+          git pull --rebase origin main
+          git push origin HEAD:main

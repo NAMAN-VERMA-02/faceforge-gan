@@ -118,6 +118,9 @@ def train(cfg: Config, loss_kind: str = "hinge", fake_data: bool = False, resume
 
     z_fix, y_fix, ncol = fixed_sample_inputs(cfg, device)
     step = 0
+    t_start = time.time()
+    deadline = t_start + cfg.time_budget_min * 60 if cfg.time_budget_min > 0 else None
+    out_of_time = False
 
     for epoch in range(start_epoch, cfg.epochs):
         G.train(); D.train()
@@ -152,11 +155,15 @@ def train(cfg: Config, loss_kind: str = "hinge", fake_data: bool = False, resume
                 print(f"  step {step:6d} | D {d_loss.item():.3f} | G {g_loss.item():.3f}")
             if max_steps and step >= max_steps:
                 break
+            if deadline and time.time() > deadline:
+                out_of_time = True
+                print(f"  time budget of {cfg.time_budget_min} min reached at step {step}")
+                break
 
         rec = {"epoch": epoch, "d_loss": d_sum / max(n, 1), "g_loss": g_sum / max(n, 1),
                "seconds": round(time.time() - t0, 1)}
 
-        if (epoch + 1) % cfg.sample_every == 0 or epoch == cfg.epochs - 1:
+        if (epoch + 1) % cfg.sample_every == 0 or epoch == cfg.epochs - 1 or out_of_time:
             with torch.no_grad():
                 imgs = G_ema(z_fix, y_fix)
             save_image(imgs, out / "samples" / f"epoch_{epoch + 1:03d}.png", nrow=ncol,
@@ -175,7 +182,7 @@ def train(cfg: Config, loss_kind: str = "hinge", fake_data: bool = False, resume
         (out / "history.json").write_text(json.dumps(history, indent=2))
         save_checkpoint(out / "last.pt", G, D, G_ema, opt_g, opt_d, epoch, cfg, history)
         export_generator(out / "generator.pt", G_ema, cfg)
-        if max_steps and step >= max_steps:
+        if (max_steps and step >= max_steps) or out_of_time:
             break
 
     print(f"done. generator exported to {out / 'generator.pt'}")

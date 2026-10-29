@@ -44,6 +44,7 @@ class Config:
     sample_every: int = 1          # epochs
     fid_every: int = 5             # epochs (0 disables FID)
     fid_samples: int = 5000
+    time_budget_min: float = 0.0   # stop cleanly after this many minutes (0 = no limit)
     seed: int = 42
     num_workers: int = 2
 
